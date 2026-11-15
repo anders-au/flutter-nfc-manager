@@ -1,3 +1,7 @@
+## 4.4.0
+
+* Fix automatic polling restarts when `invalidateAfterFirstReadIos` (or `invalidateAfterFirstRead` on `tagSessionBegin`) is false to wait for asynchronous tag callbacks. Do not restart after a failed callback, a session change, or a manual polling restart.
+
 ## 4.3.0
 
 * **Breaking:** Rename `NfcReaderErrorCodeIos.readerSessionInvalidationErrorFirstNDEFTagRead` to `readerSessionInvalidationErrorFirstNdefTagRead`.

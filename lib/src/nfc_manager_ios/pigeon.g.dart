@@ -1425,7 +1425,7 @@ abstract class FlutterApiPigeon {
 
   void tagSessionDidBecomeActive();
 
-  void tagSessionDidDetect(TagPigeon tag);
+  Future<void> tagSessionDidDetect(TagPigeon tag);
 
   void tagSessionDidInvalidateWithError(NfcReaderSessionErrorPigeon error);
 
@@ -1479,7 +1479,7 @@ abstract class FlutterApiPigeon {
           final List<Object?> args = message! as List<Object?>;
           final TagPigeon arg_tag = args[0]! as TagPigeon;
           try {
-            api.tagSessionDidDetect(arg_tag);
+            await api.tagSessionDidDetect(arg_tag);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

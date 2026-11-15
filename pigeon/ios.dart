@@ -11,7 +11,7 @@ import 'package:pigeon/pigeon.dart';
 @FlutterApi()
 abstract class FlutterApiPigeon {
   void tagSessionDidBecomeActive();
-  void tagSessionDidDetect(TagPigeon tag);
+  @async void tagSessionDidDetect(TagPigeon tag);
   void tagSessionDidInvalidateWithError(NfcReaderSessionErrorPigeon error);
   void vasSessionDidBecomeActive();
   void vasSessionDidReceive(List<NfcVasResponsePigeon> responses);

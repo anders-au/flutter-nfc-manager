@@ -3,7 +3,8 @@ import Flutter
 
 public class NfcManagerPlugin: NSObject, FlutterPlugin, HostApiPigeon {
   private let flutterApi: FlutterApiPigeon
-  private var shouldInvalidateSessionAfterFirstRead: Bool = true
+  private var shouldRestartPollingAfterRead: Bool = false
+  private var tagPollingGeneration: UInt64 = 0
   private var tagSession: NFCTagReaderSession? = nil
   private var vasSession: NFCVASReaderSession? = nil
   private var cachedTags: [String : NFCNDEFTag] = [:]
@@ -28,7 +29,8 @@ public class NfcManagerPlugin: NSObject, FlutterPlugin, HostApiPigeon {
     if let alertMessage = alertMessage {
       tagSession?.alertMessage = alertMessage
     }
-    shouldInvalidateSessionAfterFirstRead = invalidateAfterFirstRead
+    // This option controls polling restarts; it does not invalidate the session.
+    shouldRestartPollingAfterRead = !invalidateAfterFirstRead
     tagSession?.begin()
   }
 
@@ -52,7 +54,14 @@ public class NfcManagerPlugin: NSObject, FlutterPlugin, HostApiPigeon {
     guard let tagSession = tagSession else {
       throw FlutterError(code: "no_active_sessions", message: "Session is not active.", details: nil)
     }
-    tagSession.restartPolling()
+    restartTagPolling(tagSession)
+  }
+
+  private func restartTagPolling(_ session: NFCTagReaderSession) {
+    guard self.tagSession === session else { return }
+    tagPollingGeneration &+= 1
+    cachedTags.removeAll()
+    session.restartPolling()
   }
 
   func tagSessionSetAlertMessage(alertMessage: String) throws {
@@ -657,38 +666,50 @@ extension NfcManagerPlugin: NFCTagReaderSessionDelegate {
   }
 
   public func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
-    session.connect(to: tags.first!) { error in
-      if let error = error {
-        // skip tag detection
-        print(error)
-        if !self.shouldInvalidateSessionAfterFirstRead {
-          session.restartPolling()
-        }
-        return
-      }
-      convert(tags.first!) { tag, pigeon, error in
-        if let error = error {
-          // skip tag detection
-          print(error)
-          if !self.shouldInvalidateSessionAfterFirstRead {
-            session.restartPolling()
-          }
-          return
-        }
-        guard let pigeon = pigeon else {
-          // skip tag detection
-          if !self.shouldInvalidateSessionAfterFirstRead {
-            session.restartPolling()
-          }
-          return
-        }
+    DispatchQueue.main.async {
+      guard self.tagSession === session, let detectedTag = tags.first else { return }
+      let pollingGeneration = self.tagPollingGeneration
 
-        DispatchQueue.main.sync {
-          guard self.tagSession === session else { return }
-          self.cachedTags[pigeon.handle] = tag
-          self.flutterApi.tagSessionDidDetect(tag: pigeon) { _ in /* no op */ }
-          if !self.shouldInvalidateSessionAfterFirstRead {
-            session.restartPolling()
+      session.connect(to: detectedTag) { error in
+        DispatchQueue.main.async {
+          guard self.tagSession === session,
+                self.tagPollingGeneration == pollingGeneration else { return }
+          if let error = error {
+            print(error)
+            if self.shouldRestartPollingAfterRead {
+              self.restartTagPolling(session)
+            }
+            return
+          }
+
+          convert(detectedTag) { tag, pigeon, error in
+            DispatchQueue.main.async {
+              guard self.tagSession === session,
+                    self.tagPollingGeneration == pollingGeneration else { return }
+              if let error = error {
+                print(error)
+              }
+              guard error == nil, let pigeon = pigeon else {
+                if self.shouldRestartPollingAfterRead {
+                  self.restartTagPolling(session)
+                }
+                return
+              }
+
+              self.cachedTags[pigeon.handle] = tag
+              self.flutterApi.tagSessionDidDetect(tag: pigeon) { result in
+                DispatchQueue.main.async {
+                  // A callback can stop the session, begin another one, or
+                  // restart polling itself. Its late reply must not affect
+                  // a newer session or polling cycle.
+                  guard case .success = result,
+                        self.tagSession === session,
+                        self.tagPollingGeneration == pollingGeneration,
+                        self.shouldRestartPollingAfterRead else { return }
+                  self.restartTagPolling(session)
+                }
+              }
+            }
           }
         }
       }
