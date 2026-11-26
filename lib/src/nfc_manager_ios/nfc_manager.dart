@@ -140,11 +140,18 @@ final class _FlutterApiIos implements FlutterApiPigeon {
   }
 
   @override
-  void tagSessionDidDetect(TagPigeon tag) {
-    _instance._tagSessionDidDetectTag?.call(
+  Future<void> tagSessionDidDetect(TagPigeon tag) async {
+    final callback = _instance._tagSessionDidDetectTag;
+    if (callback == null) return;
+
+    // Keep the public void callback signature compatible with existing callers,
+    // but retain the runtime return value of async callbacks so native polling
+    // cannot restart while their tag operations are still running.
+    final result = Function.apply(callback, [
       // ignore: invalid_use_of_visible_for_testing_member
       NfcTag(data: tag),
-    );
+    ]);
+    if (result is Future) await result;
   }
 
   @override

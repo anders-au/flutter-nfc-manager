@@ -33,8 +33,16 @@ abstract class NfcManager {
   ///
   /// (iOS only) [alertMessageIos] is used to display the message on the popup.
   ///
-  /// (iOS only) [invalidateAfterFirstReadIos] is used to specify whether the session should be invalidated after the
-  /// first tag discovery. Default is true.
+  /// (iOS only) [invalidateAfterFirstReadIos] controls automatic polling restarts.
+  /// The default, true, disables automatic polling restarts; it does not
+  /// invalidate the session. After completing tag operations, call
+  /// [NfcManagerIos.tagSessionRestartPolling] to discover another tag, or
+  /// [stopSession] to end the session.
+  ///
+  /// When false, polling restarts after [onDiscovered] completes
+  /// successfully, including a Future returned by an async callback. Await all
+  /// tag operations in that callback. Stopping the session or manually restarting
+  /// polling takes precedence over this automatic restart.
   ///
   /// (iOS only) [onSessionErrorIos] is called when the session is invalidated for some reason after the session has started.
   ///
